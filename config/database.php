@@ -23,30 +23,30 @@ class Database {
         }
     }
     
-    public static function getInstance() {
+    public static function getInstance(): Database {
         if (self::$instance === null) {
             self::$instance = new self();
         }
         return self::$instance;
     }
     
-    public function getConnection() {
+    public function getConnection(): PDO {
         return $this->conn;
     }
     
-    public function beginTransaction() {
+    public function beginTransaction(): bool {
         return $this->conn->beginTransaction();
     }
     
-    public function commit() {
+    public function commit(): bool {
         return $this->conn->commit();
     }
     
-    public function rollback() {
+    public function rollback(): bool {
         return $this->conn->rollback();
     }
     
-    public function lastInsertId() {
+    public function lastInsertId(): string {
         return $this->conn->lastInsertId();
     }
 }

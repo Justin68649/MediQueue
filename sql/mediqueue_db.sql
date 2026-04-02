@@ -21,6 +21,11 @@ CREATE TABLE `users` (
     `last_login` TIMESTAMP NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- Patient-specific fields
+    `date_of_birth` DATE NULL,
+    `gender` ENUM('male', 'female', 'other') NULL,
+    `blood_group` VARCHAR(5) NULL,
+    `address` TEXT NULL,
     INDEX idx_role (`role`),
     INDEX idx_email (`email`),
     INDEX idx_department (`department_id`)
@@ -92,8 +97,8 @@ CREATE TABLE `feedback` (
     `patient_id` INT NOT NULL,
     `staff_id` INT NULL,
     `rating` INT CHECK (rating >= 1 AND rating <= 5),
-    `wait_time_rating` INT CHECK (wait_time_rating >= 1 AND rating <= 5),
-    `service_quality` INT CHECK (service_quality >= 1 AND rating <= 5),
+    `wait_time_rating` INT CHECK (wait_time_rating >= 1 AND wait_time_rating <= 5),
+    `service_quality` INT CHECK (service_quality >= 1 AND service_quality <= 5),
     `comment` TEXT,
     `suggestions` TEXT,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
