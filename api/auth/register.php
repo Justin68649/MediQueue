@@ -90,10 +90,10 @@ $user_id = strtoupper(substr($data['role'], 0, 1)) . date('YmdHis') . rand(10, 9
 // Hash password
 $hashed_password = password_hash($data['password'], PASSWORD_DEFAULT);
 
-// Insert user
+// Insert user (core fields; avoid schema mismatch on older DB setups)
 $stmt = $conn->prepare("
-    INSERT INTO users (user_id, full_name, email, phone, password, role, department_id, date_of_birth, gender, blood_group, address) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (user_id, full_name, email, phone, password, role, department_id) 
+    VALUES (?, ?, ?, ?, ?, ?, ?)
 ");
 
 $department_id = ($data['role'] === 'staff') ? ($data['department_id'] ?? null) : null;
@@ -106,12 +106,25 @@ try {
         $data['phone'],
         $hashed_password,
         $data['role'],
-        $department_id,
-        $data['date_of_birth'],
-        $data['gender'],
-        $data['blood_group'],
-        $data['address']
+        $department_id
     ]);
+
+    // Optionally store extended patient fields if present in schema
+    if ($result && $data['role'] === 'patient') {
+        try {
+            $updateStmt = $conn->prepare("UPDATE users SET date_of_birth = ?, gender = ?, blood_group = ?, address = ? WHERE user_id = ?");
+            $updateStmt->execute([
+                $data['date_of_birth'],
+                $data['gender'],
+                $data['blood_group'],
+                $data['address'],
+                $user_id
+            ]);
+        } catch (Exception $small) {
+            // If fields are absent, ignore; not critical
+            error_log('Optional patient fields not saved: ' . $small->getMessage());
+        }
+    }
 } catch (Exception $e) {
     error_log('Registration insert error: ' . $e->getMessage());
     sendJsonResponse(false, 'Registration failed: ' . $e->getMessage());

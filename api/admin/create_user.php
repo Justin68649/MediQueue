@@ -57,8 +57,8 @@ try {
     
     // Insert user
     $stmt = $conn->prepare("
-        INSERT INTO users (user_id, full_name, email, phone, password, role, department_id, is_active, date_of_birth, gender, blood_group, address) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (user_id, full_name, email, phone, password, role, department_id, is_active) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
     $department_id = ($input['role'] === 'staff') ? ($input['department_id'] ?? null) : null;
@@ -72,11 +72,7 @@ try {
         $hashed_password,
         $input['role'],
         $department_id,
-        $is_active,
-        $input['date_of_birth'] ?? null,
-        $input['gender'] ?? null,
-        $input['blood_group'] ?? null,
-        $input['address'] ?? null
+        $is_active
     ]);
     
     if ($result) {

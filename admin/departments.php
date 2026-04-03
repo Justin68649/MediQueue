@@ -252,7 +252,10 @@ $departments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 const data = await response.json();
                 
                 if (data.success) {
-                    const dept = data.department;
+                    const dept = data.data?.department || data.department;
+                    if (!dept) {
+                        throw new Error('Department payload missing');
+                    }
                     document.getElementById('modalTitle').textContent = 'Edit Department';
                     document.getElementById('dept_id').value = dept.id;
                     document.getElementById('name').value = dept.name;

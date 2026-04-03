@@ -371,7 +371,7 @@ $departments = $dept_stmt->fetchAll(PDO::FETCH_ASSOC);
                 const data = await response.json();
                 
                 if (data.success) {
-                    const user = data.user;
+                    const user = data.data?.user || data.user;
                     document.getElementById('modalTitle').textContent = 'Edit User';
                     document.getElementById('user_id').value = user.id;
                     document.getElementById('full_name').value = user.full_name;
