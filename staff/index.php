@@ -523,43 +523,54 @@ $recent_completed = $stmt->fetchAll();
         // ============ NOTIFICATION SYSTEM ============
         async function loadNotifications() {
             try {
-                const response = await fetch('../api/notifications/get_notifications.php?limit=5&unread=1', {
+                const response = await fetch('../api/notifications/get_notifications.php?limit=10', {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' }
                 });
                 const data = await response.json();
-                
+
                 const notificationList = document.getElementById('notificationList');
                 const badge = document.getElementById('notificationBadge');
                 const noNotifications = document.getElementById('noNotifications');
-                
-                if (data.success && data.notifications.length > 0) {
+
+                if (data.success && Array.isArray(data.notifications) && data.notifications.length > 0) {
                     notificationList.innerHTML = '';
                     noNotifications.classList.add('hidden');
-                    
+
                     data.notifications.forEach(notif => {
                         const notifEl = document.createElement('div');
-                        notifEl.className = 'p-3 hover:bg-gray-100 cursor-pointer transition border-l-4 border-teal-500 ' + 
-                                          (notif.is_read ? 'bg-gray-50' : 'bg-teal-50');
+                        notifEl.className = 'p-3 hover:bg-gray-100 cursor-pointer transition border-l-4 border-teal-500 ' + (notif.is_read ? 'bg-gray-50' : 'bg-teal-50');
                         notifEl.innerHTML = `
                             <div class="flex justify-between items-start">
                                 <div class="flex-1">
                                     <p class="font-semibold text-sm">${notif.title}</p>
                                     <p class="text-xs text-gray-600 mt-1">${notif.message}</p>
-                                    <p class="text-xs text-gray-400 mt-2">${new Date(notif.created_at).toLocaleTimeString()}</p>
+                                    <p class="text-xs text-gray-400 mt-2">${new Date(notif.created_at).toLocaleString()}</p>
                                 </div>
-                                <button onclick="deleteNotification(${notif.id})" class="text-red-500 hover:text-red-700 ml-2">
+                                <button type="button" class="text-red-500 hover:text-red-700 ml-2">
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
                         `;
                         notifEl.onclick = () => markNotificationRead(notif.id);
+
+                        const deleteBtn = notifEl.querySelector('button');
+                        if (deleteBtn) {
+                            deleteBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                deleteNotification(notif.id);
+                            });
+                        }
+
                         notificationList.appendChild(notifEl);
                     });
-                    
-                    // Update badge
-                    badge.textContent = data.total;
-                    badge.classList.remove('hidden');
+
+                    if (data.unread_count > 0) {
+                        badge.textContent = data.unread_count;
+                        badge.classList.remove('hidden');
+                    } else {
+                        badge.classList.add('hidden');
+                    }
                 } else {
                     notificationList.innerHTML = '';
                     noNotifications.classList.remove('hidden');
