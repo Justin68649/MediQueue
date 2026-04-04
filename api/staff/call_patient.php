@@ -80,6 +80,20 @@ try {
     
     sendNotification($queue['patient_id'], $notification_title, $notification_message, 'queue_called', $queue_id);
     
+    // Send notification to admin about patient being called (non-blocking)
+    try {
+        $adminStmt = $conn->prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1");
+        $adminStmt->execute();
+        $admins = $adminStmt->fetchAll();
+        
+        foreach ($admins as $admin) {
+            $adminMsg = "Staff {$_SESSION['user_name']} called patient {$queue['queue_number']} in {$queue['department_name']}";
+            sendNotification($admin['id'], "Patient Called - {$queue['queue_number']}", $adminMsg, 'info', $queue_id);
+        }
+    } catch (Exception $adminEx) {
+        error_log('Admin notification failed (non-blocking): ' . $adminEx->getMessage());
+    }
+    
     // Send SMS if enabled
     if (getSystemSetting('sms_enabled') === 'true') {
         $sms_message = "MediQueue: Your number {$queue['queue_number']} has been called. Please proceed to {$queue['department_name']}.";

@@ -15,15 +15,37 @@ $conn = $db->getConnection();
 $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $staff = $stmt->fetch();
+$message = '';
+$messageType = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $full_name = $_POST['full_name'] ?? '';
-    $phone = $_POST['phone'] ?? '';
-    
-    $stmt = $conn->prepare("UPDATE users SET full_name = ?, phone = ? WHERE id = ?");
-    $stmt->execute([$full_name, $phone, $_SESSION['user_id']]);
-    $_SESSION['user_name'] = $full_name;
-    $message = "Profile updated!";
+    $full_name = trim($_POST['full_name'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+
+    if ($full_name === '' || $phone === '') {
+        $message = 'Full name and phone are required.';
+        $messageType = 'error';
+    } else {
+        try {
+            $stmt = $conn->prepare("UPDATE users SET full_name = ?, phone = ? WHERE id = ?");
+            if ($stmt->execute([$full_name, $phone, $_SESSION['user_id']])) {
+                $_SESSION['user_name'] = $full_name;
+                $message = 'Profile updated successfully!';
+                $messageType = 'success';
+
+                $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+                $stmt->execute([$_SESSION['user_id']]);
+                $staff = $stmt->fetch();
+            } else {
+                $errorInfo = $stmt->errorInfo();
+                $message = 'Failed to update profile: ' . ($errorInfo[2] ?? 'Unknown error');
+                $messageType = 'error';
+            }
+        } catch (PDOException $e) {
+            $message = 'Failed to update profile: ' . $e->getMessage();
+            $messageType = 'error';
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -116,7 +138,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     current_password: document.getElementById('current_password').value,
-                    new_password: newPass
+                    new_password: newPass,
+                    confirm_password: confirmPass
                 })
             });
             

@@ -210,14 +210,14 @@ require_once 'config/config.php';
                 © <?php echo date('Y'); ?> <?php echo APP_NAME; ?>. All rights reserved.
             </p>
             <div class="flex justify-center space-x-6">
-                <a href="#" class="text-gray-400 hover:text-white transition">
-                    <i class="fas fa-envelope"></i>
+                <a href="mailto:mainajustus234@gmail.com" class="text-gray-400 hover:text-white transition" title="Email Us">
+                    <i class="fa-solid fa-envelope"></i>
                 </a>
-                <a href="#" class="text-gray-400 hover:text-white transition">
-                    <i class="fas fa-phone"></i>
+                <a href="tel:0793477406" class="text-gray-400 hover:text-white transition" title="Call Us">
+                    <i class="fa-solid fa-phone"></i>
                 </a>
-                <a href="#" class="text-gray-400 hover:text-white transition">
-                    <i class="fas fa-map-marker-alt"></i>
+                <a href="https://www.google.com/maps/search/?api=1&query=Nairobi,+Kenya" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-white transition" title="Find Us">
+                    <i class="fa-solid fa-map-marker-alt"></i>
                 </a>
             </div>
         </div>

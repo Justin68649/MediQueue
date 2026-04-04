@@ -16,6 +16,9 @@ if (!$data) {
     sendJsonResponse(false, 'Invalid JSON input');
 }
 
+// Debug: Log the incoming request
+error_log('join_queue.php: Received request from user ' . ($_SESSION['user_id'] ?? 'unknown') . ', data: ' . json_encode($data));
+
 // For JSON API requests from authenticated users, CSRF validation is optional
 // since JSON payloads cannot be submitted from a cross-origin form
 if (!empty($data['csrf_token'])) {
@@ -58,7 +61,7 @@ try {
 
 if ($existing) {
     error_log("join_queue.php: Blocking join - existing queue: " . json_encode($existing));
-    sendJsonResponse(false, 'You already have an active queue entry', [
+    sendJsonResponse(false, 'You already have an active queue entry. Please cancel your current queue before joining a new one.', [
         'queue_number' => $existing['queue_number'],
         'status' => $existing['status']
     ]);
@@ -153,6 +156,29 @@ try {
         logAudit($_SESSION['user_id'], 'joined_queue', "Joined queue: {$queueNumber}");
     } catch (Exception $auditEx) {
         error_log('Audit logging failed (non-blocking): ' . $auditEx->getMessage());
+    }
+    
+    // Notify staff members in the department about new queue entry (non-blocking)
+    try {
+        $staffStmt = $conn->prepare("
+            SELECT id FROM users 
+            WHERE department_id = ? AND role = 'staff' AND is_active = 1
+        ");
+        $staffStmt->execute([$data['department_id']]);
+        $staffMembers = $staffStmt->fetchAll();
+        
+        // Get department name
+        $deptStmt = $conn->prepare("SELECT name FROM departments WHERE id = ?");
+        $deptStmt->execute([$data['department_id']]);
+        $dept = $deptStmt->fetch();
+        $deptName = $dept ? $dept['name'] : 'Department';
+        
+        foreach ($staffMembers as $staff) {
+            $staffNotifMsg = "New patient {$queueNumber} joined {$deptName}. Position: {$position}";
+            sendNotification($staff['id'], "New Queue Entry - {$queueNumber}", $staffNotifMsg, 'info', $queueId);
+        }
+    } catch (Exception $staffNotifEx) {
+        error_log('Staff notification failed (non-blocking): ' . $staffNotifEx->getMessage());
     }
     
     sendJsonResponse(true, 'Successfully joined the queue', [

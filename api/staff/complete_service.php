@@ -82,6 +82,20 @@ try {
     $notification_message = "Your service has been completed. Thank you for visiting " . APP_NAME . ".";
     sendNotification($queue['patient_id'], $notification_title, $notification_message, 'info', $queue_id);
     
+    // Send notification to admin about service completion (non-blocking)
+    try {
+        $adminStmt = $conn->prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1");
+        $adminStmt->execute();
+        $admins = $adminStmt->fetchAll();
+        
+        foreach ($admins as $admin) {
+            $adminMsg = "Staff {$_SESSION['user_name']} completed service for {$queue['queue_number']} (Service time: {$service_time} min)";
+            sendNotification($admin['id'], "Service Completed - {$queue['queue_number']}", $adminMsg, 'info', $queue_id);
+        }
+    } catch (Exception $adminEx) {
+        error_log('Admin notification failed (non-blocking): ' . $adminEx->getMessage());
+    }
+    
     // Send SMS if enabled
     if (getSystemSetting('sms_enabled') === 'true') {
         $sms_message = APP_NAME . ": Your service is complete. Thank you for visiting us!";

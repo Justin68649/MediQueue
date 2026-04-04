@@ -16,6 +16,10 @@ $conn = $db->getConnection();
 $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
+
+$deptStmt = $conn->prepare("SELECT id, name, prefix, avg_service_time FROM departments WHERE is_active = 1 ORDER BY name ASC");
+$deptStmt->execute();
+$departments = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -48,6 +52,9 @@ $user = $stmt->fetch();
         .status-serving { background: #D1FAE5; color: #065F46; }
         .status-completed { background: #D1FAE5; color: #065F46; }
     </style>
+    <script>
+        window.csrfToken = <?php echo json_encode(getCSRFToken()); ?>;
+    </script>
 </head>
 <body class="bg-gray-50">
     <!-- Navigation -->
@@ -102,7 +109,13 @@ $user = $stmt->fetch();
                         <label class="block text-sm font-medium text-gray-700 mb-2">Select Department</label>
                         <select id="department_id" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
                             <option value="">Choose department...</option>
+                            <?php if (!empty($departments)): ?>
+                                <?php foreach ($departments as $dept): ?>
+                                    <option value="<?php echo (int)$dept['id']; ?>"><?php echo htmlspecialchars($dept['name'] . ' (' . $dept['prefix'] . ') - Est. wait: ' . $dept['avg_service_time'] . ' min'); ?></option>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </select>
+                        <div id="departmentStatus" style="margin-top: 5px; font-size: 12px; color: #666;"></div>
                     </div>
                     
                     <div>
@@ -183,34 +196,74 @@ $user = $stmt->fetch();
 
         // Load departments
         async function loadDepartments() {
+            const select = document.getElementById('department_id');
+            const statusDiv = document.getElementById('departmentStatus');
+            const selectedValue = select.value;
+            const hadOptions = select.options.length > 1;
+
             try {
-                const response = await fetch('../api/public/get_departments.php');
+                if (statusDiv) {
+                    statusDiv.innerHTML = '⏳ Loading departments...';
+                    statusDiv.style.color = '#666';
+                }
+
+                const response = await fetch('../public/get_departments.php');
                 const data = await response.json();
                 
                 if (data.success) {
-                    const select = document.getElementById('department_id');
+                    const selectedValue = select.value;
+                    select.innerHTML = '<option value="">Choose department...</option>';
                     data.departments.forEach(dept => {
                         const option = document.createElement('option');
                         option.value = dept.id;
                         option.textContent = `${dept.name} (${dept.prefix}) - Est. wait: ${dept.avg_service_time} min`;
                         select.appendChild(option);
                     });
+
+                    if (selectedValue && Array.from(select.options).some(opt => opt.value === selectedValue)) {
+                        select.value = selectedValue;
+                    }
+
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '✅ ' + data.departments.length + ' department(s) available';
+                        statusDiv.style.color = 'green';
+                    }
+                } else {
+                    if (hadOptions) {
+                        if (statusDiv) {
+                            statusDiv.innerHTML = '⚠️ Using existing department list while API is unavailable.';
+                            statusDiv.style.color = 'orange';
+                        }
+                    } else if (statusDiv) {
+                        statusDiv.innerHTML = '⚠️ No departments available. Please contact support.';
+                        statusDiv.style.color = 'orange';
+                    }
                 }
             } catch (error) {
                 console.error('Error loading departments:', error);
+                if (hadOptions) {
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '⚠️ Using existing department list while API is unavailable.';
+                        statusDiv.style.color = 'orange';
+                    }
+                } else if (statusDiv) {
+                    statusDiv.innerHTML = '❌ Error loading departments: ' + error.message;
+                    statusDiv.style.color = 'red';
+                }
             }
         }
 
         // Load active queue status
         async function loadActiveQueue() {
             try {
-                const response = await fetch('../api/patient/get_status.php');
+                const response = await fetch('get_status.php');
                 const data = await response.json();
                 
                 if (data.success && data.has_active) {
                     currentQueueId = data.queue.id;
                     displayActiveQueue(data.queue);
                 } else {
+                    currentQueueId = null;
                     document.getElementById('activeQueue').innerHTML = `
                         <div class="bg-gray-100 rounded-xl p-6 text-center">
                             <i class="fas fa-inbox text-gray-400 text-5xl mb-3"></i>
@@ -311,6 +364,15 @@ $user = $stmt->fetch();
         document.getElementById('joinQueueForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            // Check if patient already has an active queue
+            if (currentQueueId) {
+                const resultDiv = document.getElementById('joinResult');
+                resultDiv.className = 'mt-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded-lg';
+                resultDiv.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>You already have an active queue. Please cancel your current queue before joining a new one.';
+                resultDiv.classList.remove('hidden');
+                return;
+            }
+            
             const departmentId = document.getElementById('department_id').value;
             const priority = document.getElementById('priority').value;
             
@@ -320,7 +382,7 @@ $user = $stmt->fetch();
             submitBtn.disabled = true;
             
             try {
-                const response = await fetch('../api/patient/join_queue.php', {
+                const response = await fetch('join_queue.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ department_id: departmentId, priority: priority })
@@ -329,7 +391,7 @@ $user = $stmt->fetch();
                 const data = await response.json();
                 const resultDiv = document.getElementById('joinResult');
                 
-                if (data.status === 'success') {
+                if (data.success || data.status === 'success') {
                     resultDiv.className = 'mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg';
                     resultDiv.innerHTML = `
                         <i class="fas fa-check-circle mr-2"></i>
@@ -353,7 +415,15 @@ $user = $stmt->fetch();
                 } else {
                     resultDiv.className = 'mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg';
                     resultDiv.innerHTML = `<i class="fas fa-exclamation-triangle mr-2"></i>${data.message || 'Failed to join queue.'}`;
+                    if (data.error) {
+                        resultDiv.innerHTML += `<br><small>${data.error}</small>`;
+                    }
                     resultDiv.classList.remove('hidden');
+                    
+                    // If patient already has an active queue, reload the active queue display
+                    if (data.message && data.message.includes('already have an active queue')) {
+                        loadActiveQueue();
+                    }
                 }
             } catch (error) {
                 console.error('Error joining queue:', error);
@@ -372,7 +442,7 @@ $user = $stmt->fetch();
             if (!confirm('Are you sure you want to cancel your queue position?')) return;
             
             try {
-                const response = await fetch('../api/patient/cancel_queue.php', {
+                const response = await fetch('cancel_queue.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ queue_id: currentQueueId })
@@ -382,6 +452,7 @@ $user = $stmt->fetch();
                 
                 if (data.success) {
                     showNotification('Queue cancelled successfully', 'success');
+                    currentQueueId = null;
                     loadActiveQueue();
                     loadStats();
                     loadHistory();
@@ -397,7 +468,7 @@ $user = $stmt->fetch();
         // Load stats
         async function loadStats() {
             try {
-                const response = await fetch('../api/patient/get_stats.php');
+                const response = await fetch('get_stats.php');
                 const data = await response.json();
                 
                 if (data.success) {
@@ -413,7 +484,7 @@ $user = $stmt->fetch();
         // Load history
         async function loadHistory() {
             try {
-                const response = await fetch('../api/patient/get_history.php');
+                const response = await fetch('get_history.php');
                 const data = await response.json();
                 
                 const tbody = document.getElementById('historyTable');
@@ -491,7 +562,7 @@ $user = $stmt->fetch();
 
         async function submitFeedback(queueId, rating) {
             try {
-                const response = await fetch('../api/patient/submit_feedback.php', {
+                const response = await fetch('submit_feedback.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ queue_id: queueId, rating: rating })

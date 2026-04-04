@@ -57,6 +57,18 @@ $stmt = $conn->prepare("
 $stmt->execute($params);
 $history = $stmt->fetchAll();
 
+// Get feedback status for history rows
+$feedbackByQueueId = [];
+if (count($history) > 0) {
+    $queueIds = array_column($history, 'id');
+    $placeholders = implode(',', array_fill(0, count($queueIds), '?'));
+    $feedbackStmt = $conn->prepare("SELECT queue_entry_id FROM feedback WHERE queue_entry_id IN ($placeholders) AND patient_id = ?");
+    $feedbackStmt->execute(array_merge($queueIds, [$_SESSION['user_id']]));
+    while ($row = $feedbackStmt->fetch(PDO::FETCH_ASSOC)) {
+        $feedbackByQueueId[$row['queue_entry_id']] = true;
+    }
+}
+
 // Get statistics
 $stats_stmt = $conn->prepare("
     SELECT 
@@ -309,16 +321,22 @@ $months = $months_stmt->fetchAll();
                                         <?php endif; ?>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <div class="flex space-x-2">
+                                        <div class="flex items-center space-x-2">
                                             <button onclick="viewDetails(<?php echo $entry['id']; ?>)" 
                                                     class="text-blue-600 hover:text-blue-800 transition">
                                                 <i class="fas fa-eye"></i>
                                             </button>
-                                            <?php if ($entry['status'] === 'completed' && !hasFeedback($entry['id'])): ?>
-                                                <button onclick="giveFeedback(<?php echo $entry['id']; ?>)" 
-                                                        class="text-yellow-600 hover:text-yellow-800 transition">
-                                                    <i class="fas fa-star"></i>
-                                                </button>
+                                            <?php if ($entry['status'] === 'completed'): ?>
+                                                <?php if (isset($feedbackByQueueId[$entry['id']])): ?>
+                                                    <span class="text-xs font-semibold text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                                                        Feedback submitted
+                                                    </span>
+                                                <?php else: ?>
+                                                    <button onclick="giveFeedback(<?php echo $entry['id']; ?>)" 
+                                                            class="text-yellow-600 hover:text-yellow-800 transition">
+                                                        <i class="fas fa-star"></i>
+                                                    </button>
+                                                <?php endif; ?>
                                             <?php endif; ?>
                                             <?php if ($entry['status'] === 'waiting'): ?>
                                                 <button onclick="cancelQueue(<?php echo $entry['id']; ?>)" 
@@ -399,13 +417,6 @@ $months = $months_stmt->fetchAll();
     <script>
         // Check if feedback exists
         <?php
-        function hasFeedback($queueId) {
-            $db = Database::getInstance();
-            $conn = $db->getConnection();
-            $stmt = $conn->prepare("SELECT id FROM feedback WHERE queue_entry_id = ?");
-            $stmt->execute([$queueId]);
-            return $stmt->fetch() ? true : false;
-        }
         ?>
         
         // View details
@@ -508,8 +519,13 @@ $months = $months_stmt->fetchAll();
                         body: JSON.stringify({ 
                             queue_id: queueId, 
                             rating: parseInt(rating),
-                        comment: comment || '',
-                        csrf_token: window.csrfToken
+                            comment: comment || '',
+                            csrf_token: window.csrfToken
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (data.success) {
                         showNotification('Thank you for your feedback!', 'success');
                         setTimeout(() => location.reload(), 1500);
                     } else {

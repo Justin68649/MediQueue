@@ -128,15 +128,29 @@ try {
         $entry['wait_time'] = $entry['wait_time'] ?? $entry['wait_time_minutes'] ?? null;
         
         // Add status badge class
-        $entry['status_class'] = match($entry['status']) {
-            'waiting' => 'status-waiting',
-            'called' => 'status-called',
-            'serving' => 'status-serving',
-            'completed' => 'status-completed',
-            'cancelled' => 'status-cancelled',
-            'no_show' => 'status-no_show',
-            default => 'status-default'
-        };
+        switch ($entry['status']) {
+            case 'waiting':
+                $entry['status_class'] = 'status-waiting';
+                break;
+            case 'called':
+                $entry['status_class'] = 'status-called';
+                break;
+            case 'serving':
+                $entry['status_class'] = 'status-serving';
+                break;
+            case 'completed':
+                $entry['status_class'] = 'status-completed';
+                break;
+            case 'cancelled':
+                $entry['status_class'] = 'status-cancelled';
+                break;
+            case 'no_show':
+                $entry['status_class'] = 'status-no_show';
+                break;
+            default:
+                $entry['status_class'] = 'status-default';
+                break;
+        }
         
         // Check if feedback exists
         $feedback_stmt = $conn->prepare("SELECT id FROM feedback WHERE queue_entry_id = ? AND patient_id = ?");

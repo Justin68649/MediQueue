@@ -69,6 +69,27 @@ $user = $stmt->fetch();
                     <a href="profile.php" class="hover:text-teal-200 transition">
                         <i class="fas fa-user mr-1"></i>Profile
                     </a>
+                    <!-- Notification Icon -->
+                    <div class="relative">
+                        <button id="notificationBtn" class="relative hover:text-teal-200 transition focus:outline-none">
+                            <i class="fas fa-bell text-xl"></i>
+                            <span id="notificationBadge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
+                        </button>
+                        <!-- Notification Dropdown -->
+                        <div id="notificationDropdown" class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-2xl text-gray-800 hidden z-50 max-h-96 overflow-y-auto">
+                            <div class="bg-gradient-primary text-white px-4 py-3 font-semibold flex justify-between items-center">
+                                <span>Notifications</span>
+                                <button id="markAllRead" class="text-xs bg-white bg-opacity-20 px-2 py-1 rounded hover:bg-opacity-30 transition">Mark all read</button>
+                            </div>
+                            <div id="notificationList" class="divide-y">
+                                <!-- Notifications will be loaded here -->
+                            </div>
+                            <div class="text-center py-4 text-gray-500 hidden" id="noNotifications">
+                                <i class="fas fa-inbox text-2xl mb-2"></i>
+                                <p>No notifications</p>
+                            </div>
+                        </div>
+                    </div>
                     <span>Welcome, <?php echo htmlspecialchars($_SESSION['user_name']); ?></span>
                     <a href="../api/auth/logout.php" class="bg-red-500 px-4 py-2 rounded-lg hover:bg-red-600 transition">
                         <i class="fas fa-sign-out-alt mr-2"></i>Logout
@@ -124,27 +145,6 @@ $user = $stmt->fetch();
                 </form>
                 
                 <div id="joinResult" class="mt-4 hidden"></div>
-            </div>
-
-            <!-- Quick Stats -->
-            <div class="bg-white rounded-2xl shadow-xl p-6">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-chart-line text-teal-600 mr-2"></i>Quick Stats
-                </h2>
-                <div class="space-y-4">
-                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <span class="text-gray-600">Today's Appointments</span>
-                        <span class="text-2xl font-bold text-teal-600" id="todayCount">0</span>
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <span class="text-gray-600">Completed Visits</span>
-                        <span class="text-2xl font-bold text-green-600" id="completedCount">0</span>
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <span class="text-gray-600">Total Spent Time</span>
-                        <span class="text-2xl font-bold text-blue-600" id="totalTime">0 min</span>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -427,22 +427,6 @@ $user = $stmt->fetch();
             }
         }
 
-        // Load stats
-        async function loadStats() {
-            try {
-                const response = await fetch('../api/patient/get_stats.php');
-                const data = await response.json();
-                
-                if (data.success) {
-                    document.getElementById('todayCount').textContent = data.stats.today_count || 0;
-                    document.getElementById('completedCount').textContent = data.stats.completed_count || 0;
-                    document.getElementById('totalTime').textContent = (data.stats.total_wait_time || 0) + ' min';
-                }
-            } catch (error) {
-                console.error('Error loading stats:', error);
-            }
-        }
-
         // Load history
         async function loadHistory() {
             try {
@@ -466,11 +450,15 @@ $user = $stmt->fetch();
                                 </td>
                                 <td class="px-4 py-3">${entry.wait_time || '-'} min</td>
                                 <td class="px-4 py-3">
-                                    ${entry.status === 'completed' ? `
-                                        <button onclick="giveFeedback(${entry.id})" class="text-teal-600 hover:text-teal-800">
-                                            <i class="fas fa-star mr-1"></i>Feedback
-                                        </button>
-                                    ` : '-'}
+                                    ${entry.status === 'completed' ? (
+                                        entry.has_feedback ?
+                                        '<span class="text-sm text-gray-500">Feedback submitted</span>' :
+                                        `
+                                            <button onclick="giveFeedback(${entry.id})" class="text-teal-600 hover:text-teal-800">
+                                                <i class="fas fa-star mr-1"></i>Feedback
+                                            </button>
+                                        `
+                                    ) : '-'}
                                 </td>
                             </tr>
                         `;
@@ -546,12 +534,139 @@ $user = $stmt->fetch();
             }
         }
 
+        // Notification system
+        async function loadNotifications() {
+            try {
+                const response = await fetch('../api/notifications/get_notifications.php?limit=10', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+
+                const notificationList = document.getElementById('notificationList');
+                const badge = document.getElementById('notificationBadge');
+                const noNotifications = document.getElementById('noNotifications');
+
+                if (data.success && Array.isArray(data.notifications) && data.notifications.length > 0) {
+                    notificationList.innerHTML = '';
+                    noNotifications.classList.add('hidden');
+
+                    data.notifications.forEach(notif => {
+                        const notifEl = document.createElement('div');
+                        notifEl.className = 'p-3 hover:bg-gray-100 cursor-pointer transition border-l-4 border-teal-500 ' + (notif.is_read ? 'bg-gray-50' : 'bg-teal-50');
+                        notifEl.innerHTML = `
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <p class="font-semibold text-sm">${notif.title}</p>
+                                    <p class="text-xs text-gray-600 mt-1">${notif.message}</p>
+                                    <p class="text-xs text-gray-400 mt-2">${new Date(notif.created_at).toLocaleString()}</p>
+                                </div>
+                                <button type="button" class="text-red-500 hover:text-red-700 ml-2">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        `;
+                        notifEl.onclick = () => markNotificationRead(notif.id);
+
+                        const deleteBtn = notifEl.querySelector('button');
+                        if (deleteBtn) {
+                            deleteBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                deleteNotification(notif.id);
+                            });
+                        }
+
+                        notificationList.appendChild(notifEl);
+                    });
+
+                    if (data.unread_count > 0) {
+                        badge.textContent = data.unread_count;
+                        badge.classList.remove('hidden');
+                    } else {
+                        badge.classList.add('hidden');
+                    }
+                } else {
+                    notificationList.innerHTML = '';
+                    noNotifications.classList.remove('hidden');
+                    badge.classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading notifications:', error);
+            }
+        }
+
+        async function markNotificationRead(notificationId) {
+            try {
+                await fetch('../api/notifications/mark_read.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notification_id: notificationId })
+                });
+                await loadNotifications();
+            } catch (error) {
+                console.error('Error marking notification as read:', error);
+            }
+        }
+
+        async function deleteNotification(notificationId) {
+            try {
+                await fetch('../api/notifications/delete_notification.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notification_id: notificationId })
+                });
+                await loadNotifications();
+            } catch (error) {
+                console.error('Error deleting notification:', error);
+            }
+        }
+
+        async function markAllRead() {
+            try {
+                await fetch('../api/notifications/mark_read.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mark_all: true })
+                });
+                await loadNotifications();
+            } catch (error) {
+                console.error('Error marking all notifications as read:', error);
+            }
+        }
+
+        async function initNotifications() {
+            await loadNotifications();
+            setInterval(loadNotifications, 30000);
+
+            const markAllBtn = document.getElementById('markAllRead');
+            if (markAllBtn) {
+                markAllBtn.addEventListener('click', markAllRead);
+            }
+
+            // Handle notification dropdown toggle
+            const notificationBtn = document.getElementById('notificationBtn');
+            const notificationDropdown = document.getElementById('notificationDropdown');
+
+            if (notificationBtn && notificationDropdown) {
+                notificationBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    notificationDropdown.classList.toggle('hidden');
+                });
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!notificationBtn.contains(e.target) && !notificationDropdown.contains(e.target)) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                });
+            }
+        }
+
         // Initialize real-time updates
         function initRealTimeUpdates() {
             // Refresh every 10 seconds
             refreshInterval = setInterval(() => {
                 loadActiveQueue();
-                loadStats();
             }, 10000);
         }
 
@@ -559,9 +674,9 @@ $user = $stmt->fetch();
         async function init() {
             await loadDepartments();
             await loadActiveQueue();
-            await loadStats();
             await loadHistory();
             initRealTimeUpdates();
+            await initNotifications();
         }
 
         init();

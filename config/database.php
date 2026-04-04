@@ -1,3 +1,4 @@
+
 <?php
 // File: config/database.php
 // Database Connection Class

@@ -129,6 +129,27 @@ $satisfaction = $stmt->fetch(PDO::FETCH_ASSOC);
                     <a href="reports.php" class="hover:text-teal-200 transition">
                         <i class="fas fa-chart-line mr-1"></i>Reports
                     </a>
+                    <!-- Notification Icon -->
+                    <div class="relative">
+                        <button id="notificationBtn" class="relative hover:text-teal-200 transition focus:outline-none">
+                            <i class="fas fa-bell text-xl"></i>
+                            <span id="notificationBadge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
+                        </button>
+                        <!-- Notification Dropdown -->
+                        <div id="notificationDropdown" class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-2xl text-gray-800 hidden z-50 max-h-96 overflow-y-auto">
+                            <div class="bg-gradient-primary text-white px-4 py-3 font-semibold flex justify-between items-center">
+                                <span>Notifications</span>
+                                <button id="markAllRead" class="text-xs bg-white bg-opacity-20 px-2 py-1 rounded hover:bg-opacity-30 transition">Mark all read</button>
+                            </div>
+                            <div id="notificationList" class="divide-y">
+                                <!-- Notifications will be loaded here -->
+                            </div>
+                            <div class="text-center py-4 text-gray-500 hidden" id="noNotifications">
+                                <i class="fas fa-inbox text-2xl mb-2"></i>
+                                <p>No notifications</p>
+                            </div>
+                        </div>
+                    </div>
                     <a href="../api/auth/logout.php" class="bg-red-500 px-4 py-2 rounded-lg hover:bg-red-600 transition">
                         <i class="fas fa-sign-out-alt mr-2"></i>Logout
                     </a>
@@ -371,6 +392,128 @@ $satisfaction = $stmt->fetch(PDO::FETCH_ASSOC);
                 }
             }
         });
+
+        // ============ NOTIFICATION SYSTEM ============
+        async function loadNotifications() {
+            try {
+                const response = await fetch('../api/notifications/get_notifications.php?limit=5&unread=1', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+                
+                const notificationList = document.getElementById('notificationList');
+                const badge = document.getElementById('notificationBadge');
+                const noNotifications = document.getElementById('noNotifications');
+                
+                if (data.success && data.notifications.length > 0) {
+                    notificationList.innerHTML = '';
+                    noNotifications.classList.add('hidden');
+                    
+                    data.notifications.forEach(notif => {
+                        const notifEl = document.createElement('div');
+                        notifEl.className = 'p-3 hover:bg-gray-100 cursor-pointer transition border-l-4 border-teal-500 ' + 
+                                          (notif.is_read ? 'bg-gray-50' : 'bg-teal-50');
+                        notifEl.innerHTML = `
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <p class="font-semibold text-sm">${notif.title}</p>
+                                    <p class="text-xs text-gray-600 mt-1">${notif.message}</p>
+                                    <p class="text-xs text-gray-400 mt-2">${new Date(notif.created_at).toLocaleTimeString()}</p>
+                                </div>
+                                <button onclick="deleteNotification(${notif.id})" class="text-red-500 hover:text-red-700 ml-2">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        `;
+                        notifEl.onclick = () => markNotificationRead(notif.id);
+                        notificationList.appendChild(notifEl);
+                    });
+                    
+                    // Update badge
+                    badge.textContent = data.total;
+                    badge.classList.remove('hidden');
+                } else {
+                    notificationList.innerHTML = '';
+                    noNotifications.classList.remove('hidden');
+                    badge.classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading notifications:', error);
+            }
+        }
+        
+        async function markNotificationRead(notificationId) {
+            try {
+                await fetch('../api/notifications/mark_read.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notification_id: notificationId })
+                });
+                await loadNotifications();
+            } catch (error) {
+                console.error('Error marking notification as read:', error);
+            }
+        }
+        
+        async function deleteNotification(notificationId) {
+            try {
+                await fetch('../api/notifications/delete_notification.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notification_id: notificationId })
+                });
+                await loadNotifications();
+            } catch (error) {
+                console.error('Error deleting notification:', error);
+            }
+        }
+        
+        // Mark all notifications as read
+        async function markAllRead() {
+            try {
+                await fetch('../api/notifications/mark_read.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mark_all: true })
+                });
+                await loadNotifications();
+            } catch (error) {
+                console.error('Error marking all notifications as read:', error);
+            }
+        }
+        
+        // Load notifications on page load and refresh every 30 seconds
+        async function initNotifications() {
+            await loadNotifications();
+            setInterval(loadNotifications, 30000);
+            
+            // Add event listener for mark all read button
+            const markAllBtn = document.getElementById('markAllRead');
+            if (markAllBtn) {
+                markAllBtn.addEventListener('click', markAllRead);
+            }
+
+            // Handle notification dropdown toggle
+            const notificationBtn = document.getElementById('notificationBtn');
+            const notificationDropdown = document.getElementById('notificationDropdown');
+
+            if (notificationBtn && notificationDropdown) {
+                notificationBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    notificationDropdown.classList.toggle('hidden');
+                });
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!notificationBtn.contains(e.target) && !notificationDropdown.contains(e.target)) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                });
+            }
+        }
+
+        initNotifications();
     </script>
 </body>
 </html>

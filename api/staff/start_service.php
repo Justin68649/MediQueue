@@ -91,6 +91,20 @@ try {
     $notification_message = "Dr. " . $_SESSION['user_name'] . " has started your service.";
     sendNotification($queue['patient_id'], $notification_title, $notification_message, 'info', $queue_id);
     
+    // Send notification to admin about service start (non-blocking)
+    try {
+        $adminStmt = $conn->prepare("SELECT id FROM users WHERE role = 'admin' AND is_active = 1");
+        $adminStmt->execute();
+        $admins = $adminStmt->fetchAll();
+        
+        foreach ($admins as $admin) {
+            $adminMsg = "Staff {$_SESSION['user_name']} started serving {$queue['queue_number']}";
+            sendNotification($admin['id'], "Service Started - {$queue['queue_number']}", $adminMsg, 'info', $queue_id);
+        }
+    } catch (Exception $adminEx) {
+        error_log('Admin notification failed (non-blocking): ' . $adminEx->getMessage());
+    }
+    
     $conn->commit();
     
     // Log audit

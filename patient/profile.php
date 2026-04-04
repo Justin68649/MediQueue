@@ -22,26 +22,61 @@ $message = '';
 $messageType = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $full_name = $_POST['full_name'] ?? '';
-    $phone = $_POST['phone'] ?? '';
-    $address = $_POST['address'] ?? '';
-    $date_of_birth = $_POST['date_of_birth'] ?? '';
-    $gender = $_POST['gender'] ?? '';
-    $blood_group = $_POST['blood_group'] ?? '';
-    
-    $stmt = $conn->prepare("UPDATE users SET full_name = ?, phone = ?, address = ?, date_of_birth = ?, gender = ?, blood_group = ? WHERE id = ?");
-    if ($stmt->execute([$full_name, $phone, $address, $date_of_birth, $gender, $blood_group, $_SESSION['user_id']])) {
-        $_SESSION['user_name'] = $full_name;
-        $message = 'Profile updated successfully!';
-        $messageType = 'success';
-        
-        // Refresh user data
-        $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
-        $stmt->execute([$_SESSION['user_id']]);
-        $user = $stmt->fetch();
-    } else {
-        $message = 'Failed to update profile.';
+    $full_name = trim($_POST['full_name'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    $address = trim($_POST['address'] ?? '');
+    $date_of_birth = trim($_POST['date_of_birth'] ?? '');
+    $gender = trim($_POST['gender'] ?? '');
+    $blood_group = trim($_POST['blood_group'] ?? '');
+
+    if ($full_name === '' || $phone === '') {
+        $message = 'Full name and phone are required.';
         $messageType = 'error';
+    } else {
+        try {
+            $availableColumns = array_column($conn->query('SHOW COLUMNS FROM users')->fetchAll(PDO::FETCH_ASSOC), 'Field');
+
+            $fieldsToUpdate = [
+                'full_name' => $full_name,
+                'phone' => $phone
+            ];
+
+            if (in_array('address', $availableColumns, true)) {
+                $fieldsToUpdate['address'] = $address === '' ? null : $address;
+            }
+            if (in_array('date_of_birth', $availableColumns, true)) {
+                $fieldsToUpdate['date_of_birth'] = $date_of_birth === '' ? null : $date_of_birth;
+            }
+            if (in_array('gender', $availableColumns, true)) {
+                $fieldsToUpdate['gender'] = $gender === '' ? null : $gender;
+            }
+            if (in_array('blood_group', $availableColumns, true)) {
+                $fieldsToUpdate['blood_group'] = $blood_group === '' ? null : $blood_group;
+            }
+
+            $setClause = implode(', ', array_map(fn($f) => "$f = ?", array_keys($fieldsToUpdate)));
+            $stmt = $conn->prepare("UPDATE users SET $setClause WHERE id = ?");
+            $values = array_values($fieldsToUpdate);
+            $values[] = $_SESSION['user_id'];
+
+            if ($stmt->execute($values)) {
+                $_SESSION['user_name'] = $full_name;
+                $message = 'Profile updated successfully!';
+                $messageType = 'success';
+
+                // Refresh user data
+                $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+                $stmt->execute([$_SESSION['user_id']]);
+                $user = $stmt->fetch();
+            } else {
+                $errorInfo = $stmt->errorInfo();
+                $message = 'Failed to update profile: ' . ($errorInfo[2] ?? 'Unknown error');
+                $messageType = 'error';
+            }
+        } catch (PDOException $e) {
+            $message = 'Failed to update profile: ' . $e->getMessage();
+            $messageType = 'error';
+        }
     }
 }
 ?>
@@ -310,7 +345,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         current_password: currentPassword,
-                        new_password: newPassword
+                        new_password: newPassword,
+                        confirm_password: confirmPassword
                     })
                 });
                 
